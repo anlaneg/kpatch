@@ -3654,7 +3654,7 @@ static void kpatch_no_sibling_calls_ppc64le(struct kpatch_elf *kelf)
 
 struct arguments {
 	char *args[7];
-	bool debug, klp_arch;
+	bool debug/*-d参数指定*/, klp_arch;
 };
 
 static char args_doc[] = "original.o patched.o parent-name parent-symtab Module.symvers patch-module-name output.o";
@@ -3680,6 +3680,7 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 			arguments->klp_arch = 1;
 			break;
 		case ARGP_KEY_ARG:
+		    /*收集其它参数*/
 			if (state->arg_num >= 7)
 				/* Too many arguments. */
 				argp_usage (state);
@@ -3708,8 +3709,10 @@ int main(int argc, char *argv[])
 	char *orig_obj, *patched_obj, *parent_name;
 	char *parent_symtab, *mod_symvers, *patch_name, *output_obj;
 
+	/*解析命令行，填充arguments*/
 	memset(&arguments, 0, sizeof(arguments));
 	argp_parse (&argp, argc, argv, 0, NULL, &arguments);
+
 	if (arguments.debug)
 		loglevel = DEBUG;
 	if (arguments.klp_arch)

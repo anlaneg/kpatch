@@ -53,7 +53,7 @@ struct export_symbol {
 };
 
 struct lookup_table {
-	int obj_nr, exp_nr;
+	int obj_nr/*obj_syms数组大小*/, exp_nr/*exp_syms数组大小*/;
 	struct object_symbol *obj_syms;
 	struct export_symbol *exp_syms;
 	char *objname;
@@ -62,6 +62,7 @@ struct lookup_table {
 #define for_each_obj_symbol(ndx, iter, table) \
 	for (ndx = 0, iter = table->obj_syms; ndx < table->obj_nr; ndx++, iter++)
 
+/*自ndx位置开始遍历table->obj_syms数组元素*/
 #define for_each_obj_symbol_continue(ndx, iter, table) \
 	for (iter = table->obj_syms + ndx; ndx < table->obj_nr; ndx++, iter++)
 

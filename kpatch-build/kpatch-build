@@ -36,9 +36,13 @@
 
 set -o pipefail
 
+#取当前工作目录
 BASE="$PWD"
+#取进程真实路径
 SCRIPTDIR="$(readlink -f "$(dirname "$(type -p "$0")")")"
+#kernel版本
 ARCH="$(uname -m)"
+#当前机器cpu总数
 CPUS="$(getconf _NPROCESSORS_ONLN)"
 CACHEDIR="${CACHEDIR:-$HOME/.kpatch}"
 KERNEL_SRCDIR="$CACHEDIR/src"
@@ -46,6 +50,7 @@ RPMTOPDIR="$CACHEDIR/buildroot"
 VERSIONFILE="$CACHEDIR/version"
 TEMPDIR="$CACHEDIR/tmp"
 ENVFILE="$TEMPDIR/kpatch-build.env"
+#日志文件路径
 LOGFILE="$CACHEDIR/build.log"
 RELEASE_FILE=/etc/os-release
 DEBUG=0
@@ -58,10 +63,12 @@ APPLIED_PATCHES=0
 OOT_MODULE=
 KLP_REPLACE=1
 
+#将消息写入到错误输出
 warn() {
 	echo "ERROR: $1" >&2
 }
 
+#将错误消息输出到错误输出，并退出进程
 die() {
 	if [[ -z "$1" ]]; then
 		msg="kpatch build failed"
@@ -90,26 +97,32 @@ logger() {
 	fi
 }
 
+#环境变更导出到ENVFILE文件
 save_env() {
 	export -p | grep -wv -e 'OLDPWD=' -e 'PWD=' > "$ENVFILE"
 }
 
+#检查patch文件是否合适
 verify_patch_files() {
 	local path
 	local dir
 	local ret=0
 
+    #遍历所有待打的补丁
 	for patch in "${PATCH_LIST[@]}"; do
+	    #检查patch修改的文件列表
 		for path in $(lsdiff "$patch" 2>/dev/null); do
 
 			dir=$(dirname "$path")
 			ext="${path##*.}"
 
+            #修改的文件路径不得在lib下
 			if [[ "$dir" =~ ^lib$ ]] || [[ "$dir" =~ ^lib/ ]] ; then
 				warn "$patch: unsupported patch to lib/: $path"
 				ret=1
 			fi
 
+            #修改的文件不得包含汇编代码
 			if [[ "$ext" == "S" ]] ; then
 				warn "$patch: unsupported patch to assembly: $path"
 				ret=1
@@ -121,16 +134,19 @@ verify_patch_files() {
 	[[ $ret == 1 ]] && die "Unsupported changes detected"
 }
 
+#通过patch命令，以-p1的方式将patch打入
 apply_patches() {
 	local patch
 
 	for patch in "${PATCH_LIST[@]}"; do
 		patch -N -p1 --dry-run < "$patch" 2>&1 | logger || die "$patch file failed to apply"
 		patch -N -p1 < "$patch" 2>&1 | logger || die "$patch file failed to apply"
+		#应用的patch数增加
 		(( APPLIED_PATCHES++ ))
 	done
 }
 
+#将成功打上的补丁，移除掉
 remove_patches() {
 	local patch
 	local idx
@@ -149,6 +165,7 @@ remove_patches() {
 cleanup() {
 	rm -f "$BUILDDIR/.scmversion"
 
+    #移除patch
 	remove_patches
 
 	# restore original vmlinux if it was overwritten by sourcedir build
@@ -537,6 +554,7 @@ eval set -- "$options"
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 	-h|--help)
+	    #给定了-h选项，显示帮助信息，并退出
 		usage
 		exit 0
 		;;
@@ -550,11 +568,13 @@ while [[ $# -gt 0 ]]; do
 		shift
 		;;
 	-s|--sourcedir)
+	    #记录kernel源目录地址
 		[[ ! -d "$2" ]] && die "source dir '$2' not found"
 		USERSRCDIR="$(readlink -f "$2")"
 		shift
 		;;
 	-c|--config)
+	    #记录kernel config文件路径
 		[[ ! -f "$2" ]] && die "config file '$2' not found"
 		CONFIGFILE="$(readlink -f "$2")"
 		shift
@@ -565,6 +585,7 @@ while [[ $# -gt 0 ]]; do
 		shift
 		;;
 	-j|--jobs)
+	    #记录编译用的jobs
 		[[ ! "$2" -gt 0 ]] && die "Invalid number of make jobs '$2'"
 		CPUS="$2"
 		shift
@@ -574,15 +595,18 @@ while [[ $# -gt 0 ]]; do
 		shift
 		;;
 	-n|--name)
+	    #记录module名称
 		MODNAME="$(module_name_string "$2")"
 		shift
 		;;
 	-o|--output)
+	    #记录输出的目录
 		[[ ! -d "$2" ]] && die "output dir '$2' not found"
 		BASE="$(readlink -f "$2")"
 		shift
 		;;
 	-d|--debug)
+	    #容许多个-d指定，增加debug变量计数
 		DEBUG=$((DEBUG + 1))
 		if [[ $DEBUG -eq 1 ]]; then
 			echo "DEBUG mode enabled"
@@ -621,6 +645,7 @@ while [[ $# -gt 0 ]]; do
 	shift
 done
 
+#如果没有指明patch，则退出
 if [[ ${#PATCH_LIST[@]} -eq 0 ]]; then
 	warn "no patch file(s) specified"
 	usage
@@ -699,6 +724,7 @@ fi
 # Don't check external file.
 # shellcheck disable=SC1090
 [[ -f "$RELEASE_FILE" ]] && source "$RELEASE_FILE"
+#取linux发布版本的名称
 DISTRO="$ID"
 if [[ "$DISTRO" = fedora ]] || [[ "$DISTRO" = rhel ]] || [[ "$DISTRO" = ol ]] || [[ "$DISTRO" = centos ]] || [[ "$DISTRO" = openEuler ]]; then
 	[[ -z "$VMLINUX" ]] && VMLINUX="/usr/lib/debug/lib/modules/$ARCHVERSION/vmlinux"
@@ -713,11 +739,14 @@ elif [[ "$DISTRO" = ubuntu ]] || [[ "$DISTRO" = debian ]]; then
 		[[ -e "$VMLINUX" ]] || die "linux-image-$ARCHVERSION-dbgsym not installed"
 
 	elif [[ "$DISTRO" = debian ]]; then
+	    #debian版本必须安装image-dbg
 		[[ -e "$VMLINUX" ]] || die "linux-image-$ARCHVERSION-dbg not installed"
 	fi
 
 	export PATH="/usr/lib/ccache:$PATH"
 fi
+
+#保存环境变量
 save_env
 
 find_dirs || die "can't find supporting tools"
@@ -899,6 +928,7 @@ if [[ "$SKIPCOMPILERCHECK" -eq 0 ]]; then
 	fi
 fi
 
+#测试patch文件，先校验路径；再应用patch;再移除掉patch
 echo "Testing patch file(s)"
 cd "$BUILDDIR" || die
 verify_patch_files
@@ -932,6 +962,7 @@ if [[ -n "$CONFIG_CC_IS_CLANG" ]]; then
 	MAKEVARS+=("CC=${KPATCH_CC_PREFIX}clang")
 	MAKEVARS+=("HOSTCC=clang")
 else
+    #执行cc取值
 	MAKEVARS+=("CC=${KPATCH_CC_PREFIX}gcc")
 fi
 
@@ -939,23 +970,27 @@ if [[ -n "$CONFIG_LD_IS_LLD" ]]; then
 	MAKEVARS+=("LD=${KPATCH_CC_PREFIX}ld.lld")
 	MAKEVARS+=("HOSTLD=ld.lld")
 else
+    #指定ld取值
 	MAKEVARS+=("LD=${KPATCH_CC_PREFIX}ld")
 fi
 
 
 # $TARGETS used as list, no quotes.
 # shellcheck disable=SC2086
+#针对原始代码执行编译
 make "${MAKEVARS[@]}" "-j$CPUS" $TARGETS 2>&1 | logger || die
 
 # Save original module symvers
 cp -f "$BUILDDIR/Module.symvers" "$TEMPDIR/Module.symvers" || die
 
+#打patch后进行编译
 echo "Building patched source"
 apply_patches
 mkdir -p "$TEMPDIR/orig" "$TEMPDIR/patched"
 export KPATCH_GCC_TEMPDIR="$TEMPDIR"
 export KPATCH_GCC_SRCDIR="$BUILDDIR"
 save_env
+# 执行编译
 # $TARGETS used as list, no quotes.
 # shellcheck disable=SC2086
 KBUILD_MODPOST_WARN=1 make "${MAKEVARS[@]}" "-j$CPUS" $TARGETS 2>&1 | logger || die

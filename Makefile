@@ -17,6 +17,7 @@ CLEAN_DIRS  += clean-$(UNITTEST_DIR)
 .PHONY: vagrant-install
 
 
+#all的目标是构建所有$(BUILD_DIRS)列出的目录，会逐个进入目录进行编译
 all: $(BUILD_DIRS)
 $(BUILD_DIRS):
 	$(MAKE) -C $(@:build-%=%)

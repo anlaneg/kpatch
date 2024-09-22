@@ -31,6 +31,7 @@ all: $(TARGETS)
 
 -include $(SOURCES:.c=.d)
 
+#生成targets要求的对象
 create-diff-object: create-diff-object.o kpatch-elf.o lookup.o $(INSN)
 create-klp-module: create-klp-module.o kpatch-elf.o
 create-kpatch-module: create-kpatch-module.o kpatch-elf.o
